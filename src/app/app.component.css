@@ -1,0 +1,11 @@
+/* src/app/app.component.css */
+.univer-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Optional: remove default body margin */
+:host {
+  display: block;
+}

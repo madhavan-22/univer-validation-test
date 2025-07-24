@@ -27,6 +27,7 @@
               }
             ],
             "styles": [
+              "node_modules/@univerjs/design/lib/index.css",
               "src/styles.css"
             ],
             "scripts": []

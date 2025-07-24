@@ -1,21 +1,25 @@
 // src/app/app.component.ts
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Subscription } from 'rxjs';
 
-// Core imports
-import { Univer, ICommandService, IDataValidationRule, IDisposable, ICellData, Nullable } from '@univerjs/core';
+// --- ALL REQUIRED IMPORTS FOR A FULL UI INSTANCE ---
+import {
+    Univer, ICommandService, IDataValidationRule, IDisposable, ICommandInfo,
+    LifecycleService, LifecycleStages, LocaleType, enUS // Locale `enUS` comes from @univerjs/core
+} from '@univerjs/core';
 import { defaultTheme } from '@univerjs/design';
-import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
-import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
-import { UniverUIPlugin } from '@univerjs/ui';
-import { UniverSheetsPlugin, SetRangeValuesMutation, ISetRangeValuesMutationParams } from '@univerjs/sheets';
-import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
-import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
-import { UniverSheetsDataValidationPlugin } from '@univerjs/sheets-data-validation';
-
-// --- FINAL FIX --- This is the correct package that provides the editor service.
 import { UniverDocsPlugin } from '@univerjs/docs';
+import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
+import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
+import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
+import { UniverSheetsPlugin, SetRangeValuesMutation, ISetRangeValuesMutationParams } from '@univerjs/sheets';
+import { UniverSheetsDataValidationPlugin } from '@univerjs/sheets-data-validation';
+import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
+import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
+import { UniverUIPlugin } from '@univerjs/ui';
+import { UniverDrawingPlugin } from '@univerjs/drawing';
+import { UniverDrawingUIPlugin } from '@univerjs/drawing-ui';
 
-// Our mock service
 import { DataService } from './data.service';
 
 @Component({
@@ -27,6 +31,7 @@ export class AppComponent implements OnInit, OnDestroy {
   title = 'univer-dynamic-dropdown';
   univer!: Univer;
   commandListener: IDisposable | null = null;
+  lifecycleSubscription: Subscription | null = null;
 
   @ViewChild('univerContainer', { static: true }) univerContainer!: ElementRef;
 
@@ -39,37 +44,58 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.univer?.dispose();
     this.commandListener?.dispose();
+    this.lifecycleSubscription?.unsubscribe();
   }
 
-  async initUniver() {
-    const univer = new Univer({ theme: defaultTheme });
+  initUniver() {
+    // 1. Create the Univer instance with the correct locale configuration.
+    const univer = new Univer({
+        theme: defaultTheme,
+        locales: {
+            [LocaleType.EN_US]: enUS,
+        },
+    });
     this.univer = univer;
 
-    // Register plugins. The order is important.
+    const injector = univer.__getInjector();
+
+    // 2. Register the complete set of plugins for a full-featured sheet application.
+    // The order is critical for dependency injection.
     univer.registerPlugin(UniverRenderEnginePlugin);
     univer.registerPlugin(UniverFormulaEnginePlugin);
     univer.registerPlugin(UniverUIPlugin);
-
-    // --- FINAL FIX --- Register the UniverDocsPlugin which provides the editor capabilities.
     univer.registerPlugin(UniverDocsPlugin);
-
-    // Business plugins
+    univer.registerPlugin(UniverDocsUIPlugin);
     univer.registerPlugin(UniverSheetsPlugin);
     univer.registerPlugin(UniverSheetsUIPlugin);
     univer.registerPlugin(UniverSheetsFormulaPlugin);
+    
+    // Register the undocumented dependencies for Data Validation
+    univer.registerPlugin(UniverDrawingPlugin);
+    univer.registerPlugin(UniverDrawingUIPlugin);
+
+    // Register our feature plugin LAST
     univer.registerPlugin(UniverSheetsDataValidationPlugin);
 
-    // Create the spreadsheet
+    // 3. Create the spreadsheet using the older, but working, method for this version.
     univer.createUniverSheet({
       id: 'workbook-01',
-      sheets: { 'sheet-01': { id: 'sheet-01', cellData: { '1': { '0': { v: 'Click Me for Dropdown' } } } } }
+      sheets: { 'sheet-01': { id: 'sheet-01', cellData: { '0': { '0': { v: 'Task Status' } } } } }
     });
 
-    const injector = univer.__getInjector();
     const commandService = injector.get(ICommandService);
+    const lifecycleService = injector.get(LifecycleService);
 
-    await this.applyDataValidation(commandService);
-    this.listenForCellValueChanges(commandService);
+    // 4. Use the lifecycle hook to ensure everything is ready.
+    this.lifecycleSubscription = lifecycleService
+        .subscribeWithPrevious()
+        .subscribe(async (stage) => {
+            if (stage === LifecycleStages.Ready) {
+                await this.applyDataValidation(commandService);
+                this.listenForCellValueChanges(commandService);
+                this.lifecycleSubscription?.unsubscribe();
+            }
+        });
   }
 
   async applyDataValidation(commandService: ICommandService) {
@@ -78,7 +104,7 @@ export class AppComponent implements OnInit, OnDestroy {
       uid: `rule-${Date.now()}`,
       type: 'list',
       formula1: options.join(','),
-      ranges: [{ startRow: 1, endRow: 10, startColumn: 0, endColumn: 0 }],
+      ranges: [{ startRow: 0, endRow: 10, startColumn: 0, endColumn: 0 }],
     };
     const params = {
       unitId: 'workbook-01',
@@ -91,7 +117,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   listenForCellValueChanges(commandService: ICommandService) {
-    this.commandListener = commandService.onCommandExecuted((commandInfo) => {
+    this.commandListener = commandService.onCommandExecuted((commandInfo: ICommandInfo) => {
       if (commandInfo.id === SetRangeValuesMutation.id) {
         const params = commandInfo.params as ISetRangeValuesMutationParams;
         const cellMatrix = params.cellValue as any;

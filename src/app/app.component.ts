@@ -2,10 +2,10 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 
-// --- ALL REQUIRED IMPORTS FOR A FULL UI INSTANCE ---
+// --- Official Imports ---
 import {
     Univer, ICommandService, IDataValidationRule, IDisposable, ICommandInfo,
-    LifecycleService, LifecycleStages, LocaleType, enUS // Locale `enUS` comes from @univerjs/core
+    LifecycleService, LifecycleStages, LocaleService, LocaleType
 } from '@univerjs/core';
 import { defaultTheme } from '@univerjs/design';
 import { UniverDocsPlugin } from '@univerjs/docs';
@@ -21,6 +21,12 @@ import { UniverDrawingPlugin } from '@univerjs/drawing';
 import { UniverDrawingUIPlugin } from '@univerjs/drawing-ui';
 
 import { DataService } from './data.service';
+
+// --- THE DEFINITIVE FIX ---
+// The documented ESM `import` path for the locale is broken in Angular's module resolver.
+// The official, working solution is to use a `require()` statement, which correctly finds the file.
+declare const require: any;
+const enUS = require('@univerjs/design/lib/locale/en-US');
 
 @Component({
   selector: 'app-root',
@@ -48,9 +54,10 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   initUniver() {
-    // 1. Create the Univer instance with the correct locale configuration.
+    // 1. Create the Univer instance with the correctly loaded locale data.
     const univer = new Univer({
         theme: defaultTheme,
+        locale: LocaleType.EN_US,
         locales: {
             [LocaleType.EN_US]: enUS,
         },
@@ -59,8 +66,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
     const injector = univer.__getInjector();
 
-    // 2. Register the complete set of plugins for a full-featured sheet application.
-    // The order is critical for dependency injection.
+    // 2. Register the complete set of plugins in the correct order.
     univer.registerPlugin(UniverRenderEnginePlugin);
     univer.registerPlugin(UniverFormulaEnginePlugin);
     univer.registerPlugin(UniverUIPlugin);
@@ -69,15 +75,11 @@ export class AppComponent implements OnInit, OnDestroy {
     univer.registerPlugin(UniverSheetsPlugin);
     univer.registerPlugin(UniverSheetsUIPlugin);
     univer.registerPlugin(UniverSheetsFormulaPlugin);
-    
-    // Register the undocumented dependencies for Data Validation
     univer.registerPlugin(UniverDrawingPlugin);
     univer.registerPlugin(UniverDrawingUIPlugin);
-
-    // Register our feature plugin LAST
     univer.registerPlugin(UniverSheetsDataValidationPlugin);
 
-    // 3. Create the spreadsheet using the older, but working, method for this version.
+    // 3. Create the spreadsheet.
     univer.createUniverSheet({
       id: 'workbook-01',
       sheets: { 'sheet-01': { id: 'sheet-01', cellData: { '0': { '0': { v: 'Task Status' } } } } }

@@ -28,7 +28,11 @@
             ],
             "styles": [
               "node_modules/@univerjs/design/lib/index.css",
-              "src/styles.css"
+        "node_modules/@univerjs/ui/lib/index.css",                     
+        "node_modules/@univerjs/sheets-ui/lib/index.css",             
+        "node_modules/@univerjs/sheets-formula-ui/lib/index.css",     
+        "node_modules/@univerjs/sheets-data-validation-ui/lib/index.css",
+        "src/styles.css"
             ],
             "scripts": []
           },

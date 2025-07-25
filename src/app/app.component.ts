@@ -1,11 +1,11 @@
 // src/app/app.component.ts
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 
-// --- ALL CORRECT IMPORTS FOR A FULL UI INSTANCE ---
+// --- Official Imports ---
 import {
     Univer, ICommandService, IDataValidationRule, IDisposable, ICommandInfo,
-    LifecycleService, LifecycleStages, LocaleService, LocaleType
+    LifecycleService, LifecycleStages, LocaleType, UniverInstanceType
 } from '@univerjs/core';
 import { defaultTheme } from '@univerjs/design';
 import { UniverDocsPlugin } from '@univerjs/docs';
@@ -13,39 +13,45 @@ import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
 import { UniverSheetsPlugin, SetRangeValuesMutation, ISetRangeValuesMutationParams } from '@univerjs/sheets';
-import { UniverSheetsDataValidationPlugin } from '@univerjs/sheets-data-validation';
 import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
 import { UniverUIPlugin } from '@univerjs/ui';
 import { UniverDrawingPlugin } from '@univerjs/drawing';
 import { UniverDrawingUIPlugin } from '@univerjs/drawing-ui';
+import { UniverSheetsDataValidationPlugin, AddSheetDataValidationCommand } from '@univerjs/sheets-data-validation';
+import { UniverSheetsDataValidationUIPlugin } from '@univerjs/sheets-data-validation-ui';
+import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
+
+// The deep-import for the locale data
+import UniverDesignEnUS from '@univerjs/design/lib/locale/en-US';
+import UniverDocsUIEnUS from '@univerjs/docs-ui/lib/locale/en-US';
+import UniverSheetsEnUS from '@univerjs/sheets-ui/lib/locale/en-US';
+import UniverUIEnUS from '@univerjs/ui/lib/locale/en-US';
+import UniverSheetsDataValidationEnUS from '@univerjs/sheets-data-validation-ui/lib/locale/en-US';
+import UniverSheetsFormulaEnUS from '@univerjs/sheets-formula-ui/lib/locale/en-US';
 
 import { DataService } from './data.service';
-
-// --- DEFINITIVE FIX ---
-// Since `enUS` is not exported from any package in version 0.9.3, we provide a minimal
-// locale object to satisfy the LocaleService and prevent the initialization crash.
-const enUS = {
-    "sheet": { "toolbar": { "undo": "Undo", "redo": "Redo" } },
-    "shortcut": { "sheet": { "undo": "Undo" } }
-};
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit, OnDestroy {
+export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   title = 'univer-dynamic-dropdown';
   univer!: Univer;
   commandListener: IDisposable | null = null;
   lifecycleSubscription: Subscription | null = null;
 
-  @ViewChild('univerContainer', { static: true }) univerContainer!: ElementRef;
+  // This will now correctly find the <div #univerContainer> in the HTML
+  @ViewChild('univerContainer') univerContainer!: ElementRef;
 
   constructor(private dataService: DataService) {}
 
-  ngOnInit(): void {
+  ngOnInit(): void {}
+
+  ngAfterViewInit(): void {
+    // We initialize here to guarantee the `univerContainer` element exists and is sized correctly.
     this.initUniver();
   }
 
@@ -56,49 +62,66 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   initUniver() {
-    // 1. Create the Univer instance.
+    const enUS = {
+        ...UniverSheetsEnUS,
+        ...UniverDocsUIEnUS,
+        ...UniverDesignEnUS,
+        ...UniverUIEnUS,
+        ...UniverSheetsDataValidationEnUS,
+        ...UniverSheetsFormulaEnUS,
+    };
+
     const univer = new Univer({
         theme: defaultTheme,
         locale: LocaleType.EN_US,
+        locales: {
+            [LocaleType.EN_US]: enUS,
+        },
     });
     this.univer = univer;
 
-    // 2. Load the minimal, manually-defined locale data. This is the most critical step.
     const injector = univer.__getInjector();
-    const localeService = injector.get(LocaleService);
-    localeService.load({ enUS });
 
-    // 3. Register the complete set of plugins for a full-featured sheet application.
-    // The order is critical for dependency injection.
     univer.registerPlugin(UniverRenderEnginePlugin);
     univer.registerPlugin(UniverFormulaEnginePlugin);
-    univer.registerPlugin(UniverUIPlugin);
+    
+    // Pass the actual HTML element to the container. This only works inside ngAfterViewInit.
+    univer.registerPlugin(UniverUIPlugin, {
+        container: this.univerContainer.nativeElement,
+    });
+
     univer.registerPlugin(UniverDocsPlugin);
     univer.registerPlugin(UniverDocsUIPlugin);
     univer.registerPlugin(UniverSheetsPlugin);
     univer.registerPlugin(UniverSheetsUIPlugin);
     univer.registerPlugin(UniverSheetsFormulaPlugin);
-
-    // Register the undocumented dependencies for Data Validation
     univer.registerPlugin(UniverDrawingPlugin);
     univer.registerPlugin(UniverDrawingUIPlugin);
-
-    // Register our feature plugin LAST
     univer.registerPlugin(UniverSheetsDataValidationPlugin);
+    univer.registerPlugin(UniverSheetsFormulaUIPlugin);
+    univer.registerPlugin(UniverSheetsDataValidationUIPlugin);
 
-    // 4. Create the spreadsheet.
-    univer.createUniverSheet({
+    univer.createUnit(UniverInstanceType.UNIVER_SHEET, {
       id: 'workbook-01',
-      sheets: { 'sheet-01': { id: 'sheet-01', cellData: { '0': { '0': { v: 'Task Status' } } } } }
+      sheets: {
+        'sheet-01': {
+          id: 'sheet-01',
+          rowCount: 1000,
+          columnCount: 26,
+          cellData: {
+            '0': { '0': { v: 'Task Status' } },
+            '1': { '0': { v: 'Pending' } } // Use a valid initial value
+          }
+        }
+      }
     });
 
     const commandService = injector.get(ICommandService);
     const lifecycleService = injector.get(LifecycleService);
 
-    // 5. Use the lifecycle hook to ensure everything is ready.
     this.lifecycleSubscription = lifecycleService
         .subscribeWithPrevious()
-        .subscribe(async (stage) => {
+        .subscribe(async (stage: LifecycleStages) => {
             if (stage === LifecycleStages.Ready) {
                 await this.applyDataValidation(commandService);
                 this.listenForCellValueChanges(commandService);
@@ -113,15 +136,14 @@ export class AppComponent implements OnInit, OnDestroy {
       uid: `rule-${Date.now()}`,
       type: 'list',
       formula1: options.join(','),
-      ranges: [{ startRow: 0, endRow: 10, startColumn: 0, endColumn: 0 }],
+      ranges: [{ startRow: 1, endRow: 1000, startColumn: 0, endColumn: 0 }],
     };
     const params = {
       unitId: 'workbook-01',
       subUnitId: 'sheet-01',
       rule: dataValidationRule,
     };
-    const ADD_DATA_VALIDATION_MUTATION_ID = 'sheet.mutation.add-data-validation';
-    commandService.executeCommand(ADD_DATA_VALIDATION_MUTATION_ID, params);
+    commandService.executeCommand(AddSheetDataValidationCommand.id, params);
     console.log('CLIENT: Dropdown data validation rule applied to Column A.');
   }
 

@@ -1,5 +1,21 @@
 /* src/styles.css */
-body {
+html, body {
+  height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+}
+
+/* 2. Force all text inside any Univer dropdown, select menu, or menu item to be black.
+      This is an aggressive rule to override the library's broken default styles. */
+.univer-dropdown,
+.univer-dropdown-menu,
+.univer-select-menu,
+.univer-menu-item,
+.univer-dropdown *,
+.univer-dropdown-menu *,
+.univer-select-menu *,
+.univer-menu-item * {
+  color: black !important;
 }
